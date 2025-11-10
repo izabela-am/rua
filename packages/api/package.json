@@ -1,0 +1,34 @@
+{
+  "name": "@rua/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "start": "node dist/server.js",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "replay": "tsx src/scripts/replay.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.0",
+    "@rua/dmarc-parser": "workspace:*",
+    "@supabase/supabase-js": "^2.80.0",
+    "drizzle-orm": "^0.44.0",
+    "hono": "^4.10.0",
+    "inngest": "^3.44.0",
+    "jose": "^6.1.0",
+    "postgres": "^3.4.7",
+    "resend": "^6.4.0",
+    "winston": "^3.18.0",
+    "yaml": "^2.8.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "tsx": "^4.20.0"
+  }
+}
