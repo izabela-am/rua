@@ -1,0 +1,3 @@
+<?xml version="1.0"?>
+<!DOCTYPE feedback [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<feedback><report_metadata><org_name>&xxe;</org_name></report_metadata></feedback>
