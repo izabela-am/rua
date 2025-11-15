@@ -1,0 +1,19 @@
+zone_id  = "0123456789abcdef0123456789abcdef"
+domain   = "example.net"
+app_host = "rua-api.onrender.com"
+
+resend_sending = {
+  dkim_name     = "resend._domainkey"
+  dkim_value    = "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQ..."
+  send_mx_name  = "send"
+  send_mx_value = "feedback-smtp.us-east-1.amazonses.com"
+  send_spf      = "v=spf1 include:amazonses.com ~all"
+}
+
+resend_inbound_mx = "inbound-smtp.us-east-1.amazonaws.com"
+
+# Fill in after adding var.domain to Rua.
+# rua_self = {
+#   local_part   = "d-7f3k9a2mq4xz"
+#   verify_token = "..."
+# }
