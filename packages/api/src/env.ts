@@ -8,7 +8,12 @@ const schema = z.object({
   DATABASE_URL_WORKER: z.string().min(1),
   SUPABASE_URL: z.string().url(),
   SUPABASE_JWT_SECRET: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   REPORTS_DOMAIN: z.string().min(1),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_INBOUND_SECRET: z.string().min(1),
+  // Development without Resend or Supabase Storage: attachments and raw reports live on disk.
+  LOCAL_DATA_DIR: z.string().default(".local"),
 });
 
 export type Env = z.infer<typeof schema>;

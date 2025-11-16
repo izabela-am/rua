@@ -79,3 +79,81 @@ export function fakeResolver(records: {
 
 export type TestDbs = { appDb: Db; workerDb: Db };
 export type { VerifyJwt };
+
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Resend } from "resend";
+import { createApp } from "../src/app.js";
+import { supabaseVerifier } from "../src/auth.js";
+import type { Deps } from "../src/deps.js";
+import type { InboundMail } from "../src/lib/inbound.js";
+import { fsStore } from "../src/lib/storage.js";
+
+export const INBOUND_SECRET = `whsec_${Buffer.from("inbound-test-secret").toString("base64")}`;
+export const REPORTS_DOMAIN = "reports.rua.test";
+
+export const fixture = (name: string) =>
+  new Uint8Array(readFileSync(new URL(`../../dmarc-parser/fixtures/${name}`, import.meta.url)));
+
+/** Records sent events instead of calling Inngest. */
+export function eventRecorder() {
+  const sent: Array<{ name: string; id?: string; data: Record<string, unknown> }> = [];
+  return {
+    sent,
+    async send(e: unknown) {
+      sent.push(...((Array.isArray(e) ? e : [e]) as typeof sent));
+    },
+  };
+}
+
+/** Attachments keyed by email id. */
+export function fakeMail(byEmail: Record<string, Uint8Array> = {}): InboundMail & { byEmail: typeof byEmail } {
+  return {
+    byEmail,
+    async reportAttachment(emailId) {
+      const bytes = byEmail[emailId];
+      return bytes ? { id: "att_1", filename: "report.xml.gz", contentType: "application/gzip", bytes } : null;
+    },
+  };
+}
+
+export function testDeps(dbs: TestDbs, overrides: Partial<Deps> = {}): Deps {
+  const resend = new Resend("re_test_unused");
+  return {
+    ...dbs,
+    verifyJwt: supabaseVerifier(SUPABASE_URL, JWT_SECRET),
+    resolver: fakeResolver({}),
+    reportsDomain: REPORTS_DOMAIN,
+    events: eventRecorder(),
+    verifyInbound: (payload, headers) => resend.webhooks.verify({ payload, headers, webhookSecret: INBOUND_SECRET }),
+    mail: fakeMail(),
+    store: fsStore(mkdtempSync(join(tmpdir(), "rua-raw-"))),
+    ...overrides,
+  };
+}
+
+export function testClient(deps: Deps) {
+  const app = createApp(deps);
+  return {
+    app,
+    async call(accountId: string | null, method: string, path: string, body?: unknown) {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (accountId) headers.authorization = `Bearer ${await tokenFor(accountId)}`;
+      const res = await app.request(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json: any = res.status === 204 ? null : await res.json();
+      return { status: res.status, body: json };
+    },
+  };
+}
+
+/** Creates and verifies a domain for an account through the API. */
+export async function verifiedDomainFor(client: ReturnType<typeof testClient>, deps: Deps, accountId: string, name: string) {
+  const created = await client.call(accountId, "POST", "/api/domains", { name });
+  const resolver = deps.resolver as ReturnType<typeof fakeResolver>;
+  resolver.records.txt ??= {};
+  resolver.records.txt[`_rua.${name}`] = [[created.body.txt.value]];
+  await client.call(accountId, "POST", `/api/domains/${created.body.id}/verify`);
+  return created.body as { id: string; name: string; rua: string };
+}

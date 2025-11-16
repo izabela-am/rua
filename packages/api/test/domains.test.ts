@@ -1,33 +1,20 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { createApp } from "../src/app.js";
-import { supabaseVerifier } from "../src/auth.js";
-import { fakeResolver, JWT_SECRET, newAccount, setupDb, SUPABASE_URL, tokenFor } from "./helpers.js";
+import { fakeResolver, newAccount, setupDb, testClient, testDeps } from "./helpers.js";
 
 let db: Awaited<ReturnType<typeof setupDb>>;
 const resolver = fakeResolver({ txt: {} });
-let app: ReturnType<typeof createApp>;
+let client: ReturnType<typeof testClient>;
+const call: ReturnType<typeof testClient>["call"] = (...args) => client.call(...args);
 
 beforeAll(async () => {
   db = await setupDb();
-  app = createApp({
-    ...db,
-    verifyJwt: supabaseVerifier(SUPABASE_URL, JWT_SECRET),
-    resolver,
-    reportsDomain: "reports.rua.test",
-  });
+  client = testClient(testDeps(db, { resolver }));
 });
 afterAll(() => db.close());
 
-async function call(accountId: string | null, method: string, path: string, body?: unknown) {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (accountId) headers.authorization = `Bearer ${await tokenFor(accountId)}`;
-  const res = await app.request(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
-  return { status: res.status, body: res.status === 204 ? null : await res.json() };
-}
-
 test("rejects requests without a valid token", async () => {
   expect((await call(null, "GET", "/api/domains")).status).toBe(401);
-  const res = await app.request("/api/domains", { headers: { authorization: "Bearer nope" } });
+  const res = await client.app.request("/api/domains", { headers: { authorization: "Bearer nope" } });
   expect(res.status).toBe(401);
 });
 

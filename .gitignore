@@ -8,3 +8,4 @@ dist/
 .terraform/
 terraform.tfvars
 .terraform.lock.hcl.bak
+.local/
