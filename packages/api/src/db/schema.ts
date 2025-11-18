@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, inet, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, inet, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { AuthResult } from "@rua/dmarc-parser";
 
 export const accounts = pgTable("accounts", {
@@ -54,3 +54,28 @@ export const reportRecords = pgTable("report_records", {
   envelopeFrom: text("envelope_from"),
   authResults: jsonb("auth_results").$type<AuthResult[]>().notNull(),
 });
+
+export const ipIntel = pgTable("ip_intel", {
+  ip: inet("ip").primaryKey(),
+  ptr: text("ptr"),
+  ptrConfirmed: boolean("ptr_confirmed").notNull().default(false),
+  asn: integer("asn"),
+  asName: text("as_name"),
+  provider: text("provider"),
+  refreshedAt: timestamp("refreshed_at", { withTimezone: true }).notNull(),
+});
+
+export type Classification = "aligned_sender" | "known_forwarder" | "unknown";
+
+export const domainSources = pgTable(
+  "domain_sources",
+  {
+    accountId: uuid("account_id").notNull().references(() => accounts.id),
+    domainId: uuid("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+    sourceIp: inet("source_ip").notNull(),
+    classification: text("classification").$type<Classification>().notNull(),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.domainId, t.sourceIp] })],
+);

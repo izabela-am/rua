@@ -11,6 +11,8 @@ import type { Deps } from "./deps.js";
 import { env } from "./env.js";
 import { inngest } from "./inngest/client.js";
 import { createFunctions } from "./inngest/functions.js";
+import { asnTable } from "./intel/asn.js";
+import { providers } from "./intel/providers.js";
 import { systemResolver } from "./lib/dns.js";
 import { fsInbound, resendInbound } from "./lib/inbound.js";
 import { fsStore, supabaseStore } from "./lib/storage.js";
@@ -33,6 +35,9 @@ const deps: Deps = {
   store: e.SUPABASE_SERVICE_ROLE_KEY
     ? supabaseStore(e.SUPABASE_URL, e.SUPABASE_SERVICE_ROLE_KEY)
     : fsStore(`${e.LOCAL_DATA_DIR}/raw`),
+  asn: asnTable(),
+  providers: providers(),
+  now: () => new Date(),
 };
 if (local) log.warn("RESEND_API_KEY unset: reading inbound attachments from disk");
 

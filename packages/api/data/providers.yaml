@@ -1,0 +1,42 @@
+# Curated sending providers, matched by ASN or by PTR suffix (first match wins).
+#
+# forwarder: true marks mailbox providers whose infrastructure forwards mail
+# for users (auto-forwarding, Groups, aliases). Forwarding keeps the original
+# header From and breaks SPF, so an unaligned source at one of these is most
+# likely a forward, not a spoofer. ESPs are not forwarders: unaligned mail from
+# an ESP is a misconfigured sender or someone else's account.
+#
+# Small on purpose. Add an entry only when a real report needs it.
+providers:
+  - name: Google Workspace
+    forwarder: true
+    asn: [15169]
+    ptr: [google.com, googlemail.com]
+  - name: Microsoft 365
+    forwarder: true
+    asn: [8075]
+    ptr: [outlook.com, protection.outlook.com, hotmail.com]
+  - name: Yahoo
+    forwarder: true
+    ptr: [yahoo.com, yahoodns.net]
+  - name: Fastmail
+    forwarder: true
+    ptr: [messagingengine.com, fastmail.com]
+  - name: Proton Mail
+    forwarder: true
+    ptr: [protonmail.ch, proton.ch]
+  - name: Zoho Mail
+    forwarder: true
+    ptr: [zoho.com, zohomail.com]
+  - name: Amazon SES
+    ptr: [amazonses.com]
+  - name: SendGrid
+    ptr: [sendgrid.net]
+  - name: Mailchimp
+    ptr: [mcsv.net, mcdlv.net, mandrillapp.com, rsgsv.net]
+  - name: Postmark
+    ptr: [mtasv.net]
+  - name: Mailgun
+    ptr: [mailgun.net, mailgun.org]
+  - name: Brevo
+    ptr: [sendinblue.com, brevo.com]

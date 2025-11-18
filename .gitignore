@@ -9,3 +9,4 @@ dist/
 terraform.tfvars
 .terraform.lock.hcl.bak
 .local/
+packages/api/data/ip2asn-combined.tsv.gz

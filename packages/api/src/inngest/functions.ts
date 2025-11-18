@@ -1,11 +1,13 @@
 import { ReportError } from "@rua/dmarc-parser";
 import { NonRetriableError } from "inngest";
 import { ingestStored, storeAttachment, type IngestDeps } from "../ingest.js";
+import type { EnrichDeps } from "../intel/enrich.js";
+import { classifySource, distinctSourceIps, type SourceChange } from "../intel/sources.js";
 import { AttachmentTooLarge } from "../lib/inbound.js";
 import { log } from "../log.js";
 import { inngest } from "./client.js";
 
-export function createFunctions(deps: IngestDeps) {
+export function createFunctions(deps: IngestDeps & EnrichDeps) {
   const parseReport = inngest.createFunction(
     { id: "parse-report", retries: 3, timeouts: { finish: "2m" } },
     { event: "report/received" },
@@ -45,5 +47,31 @@ export function createFunctions(deps: IngestDeps) {
     },
   );
 
-  return [parseReport];
+  const classifySources = inngest.createFunction(
+    { id: "classify-sources", retries: 3 },
+    { event: "report/parsed" },
+    async ({ event, step }) => {
+      const { reportId, domainId, accountId } = event.data;
+      const ips = await step.run("distinct", () => distinctSourceIps(deps.workerDb, reportId));
+
+      // One step per IP so a slow PTR lookup retries alone; five at a time.
+      const changes: SourceChange[] = [];
+      for (let i = 0; i < ips.length; i += 5) {
+        const batch = ips.slice(i, i + 5);
+        changes.push(
+          ...(await Promise.all(
+            batch.map((ip) => step.run(`classify-${ip}`, () => classifySource(deps, { domainId, accountId }, ip))),
+          )),
+        );
+      }
+
+      await step.sendEvent("sources-classified", {
+        name: "sources/classified",
+        data: { reportId, domainId, accountId, changes },
+      });
+      return { sources: changes.length, new: changes.filter((c) => c.isNew).length };
+    },
+  );
+
+  return [parseReport, classifySources];
 }

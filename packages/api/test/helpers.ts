@@ -89,9 +89,15 @@ import { supabaseVerifier } from "../src/auth.js";
 import type { Deps } from "../src/deps.js";
 import type { InboundMail } from "../src/lib/inbound.js";
 import { fsStore } from "../src/lib/storage.js";
+import { parseAsnTsv } from "../src/intel/asn.js";
+import { providers } from "../src/intel/providers.js";
+
+export const testAsn = parseAsnTsv(readFileSync(new URL("../data/asn-sample.tsv", import.meta.url), "utf8"));
 
 export const INBOUND_SECRET = `whsec_${Buffer.from("inbound-test-secret").toString("base64")}`;
 export const REPORTS_DOMAIN = "reports.rua.test";
+/** The fixtures cover 2025-11-10; tests run as of the next day. */
+export const FIXTURE_NOW = new Date("2025-11-11T12:00:00Z");
 
 export const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`../../dmarc-parser/fixtures/${name}`, import.meta.url)));
@@ -129,6 +135,9 @@ export function testDeps(dbs: TestDbs, overrides: Partial<Deps> = {}): Deps {
     verifyInbound: (payload, headers) => resend.webhooks.verify({ payload, headers, webhookSecret: INBOUND_SECRET }),
     mail: fakeMail(),
     store: fsStore(mkdtempSync(join(tmpdir(), "rua-raw-"))),
+    asn: testAsn,
+    providers: providers(),
+    now: () => FIXTURE_NOW,
     ...overrides,
   };
 }

@@ -1,0 +1,10 @@
+# Trimmed sample in the iptoasn.com ip2asn-combined format, enough for tests and
+# local runs. `pnpm --filter @rua/api fetch-asn` downloads the full dataset to
+# data/ip2asn-combined.tsv.gz, which the loader prefers when present.
+# range_start	range_end	as_number	country	as_description
+40.107.0.0	40.107.255.255	8075	US	MICROSOFT-CORP-MSN-AS-BLOCK
+45.33.0.0	45.33.127.255	63949	US	AKAMAI-LINODE-AP
+52.100.0.0	52.103.255.255	8075	US	MICROSOFT-CORP-MSN-AS-BLOCK
+54.240.0.0	54.240.63.255	16509	US	AMAZON-02
+209.85.128.0	209.85.255.255	15169	US	GOOGLE
+2a01:111::	2a01:111:ffff:ffff:ffff:ffff:ffff:ffff	8075	US	MICROSOFT-CORP-MSN-AS-BLOCK
