@@ -4,6 +4,7 @@ import { Badge, Button, Card, Copy, ErrorText } from "../components/ui";
 import { api, ApiError, type Domain as DomainT } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Reports } from "./domain/Reports";
+import { Sources } from "./domain/Sources";
 
 export function Domain() {
   const { id } = useParams();
@@ -23,7 +24,8 @@ export function Domain() {
         <>
           <Tabs id={domain.id} />
           <Routes>
-            <Route index element={<Reports domainId={domain.id} />} />
+            <Route index element={<Sources domainId={domain.id} />} />
+            <Route path="reports" element={<Reports domainId={domain.id} />} />
             <Route path="setup" element={<Setup domain={domain} onVerified={reload} />} />
           </Routes>
         </>
@@ -34,7 +36,8 @@ export function Domain() {
 
 function Tabs({ id }: { id: string }) {
   const tabs = [
-    { to: "", label: "Reports" },
+    { to: "", label: "Sources" },
+    { to: "reports", label: "Reports" },
     { to: "setup", label: "Setup" },
   ];
   return (
