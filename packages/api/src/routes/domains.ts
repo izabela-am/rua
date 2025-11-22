@@ -26,8 +26,12 @@ export function present(d: DomainRow, reportsDomain: string) {
   };
 }
 
-export async function ensureAccount(tx: Tx, accountId: string) {
-  await tx.insert(accounts).values({ id: accountId }).onConflictDoNothing();
+/** Creates the account row on first use and keeps its email current for alert mail. */
+export async function ensureAccount(tx: Tx, accountId: string, email?: string) {
+  await tx
+    .insert(accounts)
+    .values({ id: accountId, email: email ?? null })
+    .onConflictDoUpdate({ target: accounts.id, set: email ? { email } : { id: accountId } });
 }
 
 export async function getDomain(tx: Tx, id: string) {
@@ -68,7 +72,7 @@ export function domainRoutes(deps: Deps) {
     if (!name) return c.json({ error: "invalid_domain" }, 400);
 
     const result = await withTenant(deps.appDb, c.var.accountId, async (tx) => {
-      await ensureAccount(tx, c.var.accountId);
+      await ensureAccount(tx, c.var.accountId, c.var.email);
       const [{ n } = { n: 0 }] = await tx.select({ n: count() }).from(domains);
       if (n >= MAX_DOMAINS_PER_ACCOUNT) return "limit" as const;
       const [row] = await tx

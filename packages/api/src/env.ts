@@ -14,6 +14,7 @@ const schema = z.object({
   RESEND_INBOUND_SECRET: z.string().min(1),
   // Development without Resend or Supabase Storage: attachments and raw reports live on disk.
   LOCAL_DATA_DIR: z.string().default(".local"),
+  ALERT_FROM: z.string().default("Rua <alerts@example.net>"),
 });
 
 export type Env = z.infer<typeof schema>;

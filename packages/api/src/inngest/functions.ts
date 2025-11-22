@@ -1,4 +1,5 @@
 import { ReportError } from "@rua/dmarc-parser";
+import { alertsFromChanges, deliverWebhook, emailAlert, storeAlert, type AlertDeps } from "../alerts.js";
 import { NonRetriableError } from "inngest";
 import { ingestStored, storeAttachment, type IngestDeps } from "../ingest.js";
 import type { EnrichDeps } from "../intel/enrich.js";
@@ -7,7 +8,7 @@ import { AttachmentTooLarge } from "../lib/inbound.js";
 import { log } from "../log.js";
 import { inngest } from "./client.js";
 
-export function createFunctions(deps: IngestDeps & EnrichDeps) {
+export function createFunctions(deps: IngestDeps & EnrichDeps & AlertDeps) {
   const parseReport = inngest.createFunction(
     { id: "parse-report", retries: 3, timeouts: { finish: "2m" } },
     { event: "report/received" },
@@ -73,5 +74,33 @@ export function createFunctions(deps: IngestDeps & EnrichDeps) {
     },
   );
 
-  return [parseReport, classifySources];
+  const raiseFromSources = inngest.createFunction(
+    { id: "alerts-from-sources" },
+    { event: "sources/classified" },
+    async ({ event, step }) => {
+      const requests = alertsFromChanges(event.data, event.data.changes);
+      if (requests.length === 0) return { alerts: 0 };
+      await step.sendEvent(
+        "raise",
+        // The event id makes a re-run of classification raise nothing new.
+        requests.map((data) => ({ name: "alert/raise" as const, id: `alert-${data.domainId}-${data.dedupKey}`, data })),
+      );
+      return { alerts: requests.length };
+    },
+  );
+
+  // One run per alert. Store first, then each channel in its own retried step.
+  const raiseAlert = inngest.createFunction(
+    { id: "raise-alert", retries: 5 },
+    { event: "alert/raise" },
+    async ({ event, step }) => {
+      const alertId = await step.run("store", () => storeAlert(deps.workerDb, event.data));
+      if (!alertId) return { duplicate: true };
+      const email = await step.run("email", () => emailAlert(deps, alertId));
+      const webhook = await step.run("webhook", () => deliverWebhook(deps, alertId));
+      return { alertId, email, webhook };
+    },
+  );
+
+  return [parseReport, classifySources, raiseFromSources, raiseAlert];
 }

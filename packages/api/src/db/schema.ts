@@ -1,9 +1,16 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, inet, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, customType, date, inet, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { AuthResult } from "@rua/dmarc-parser";
+
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "bytea",
+  toDriver: (v) => Buffer.from(v),
+  fromDriver: (v) => new Uint8Array(v),
+});
 
 export const accounts = pgTable("accounts", {
   id: uuid("id").primaryKey(),
+  email: text("email"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -78,4 +85,52 @@ export const domainSources = pgTable(
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.domainId, t.sourceIp] })],
+);
+
+export type AlertKind = "new_source" | "spoofing_source" | "policy_ready" | "ownership_lost" | "audit_finding";
+
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    accountId: uuid("account_id").notNull().references(() => accounts.id),
+    domainId: uuid("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<AlertKind>().notNull(),
+    dedupKey: text("dedup_key").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    webhookDeliveredAt: timestamp("webhook_delivered_at", { withTimezone: true }),
+  },
+  (t) => [unique().on(t.domainId, t.dedupKey)],
+);
+
+export const alertWebhooks = pgTable("alert_webhooks", {
+  accountId: uuid("account_id").primaryKey().references(() => accounts.id),
+  url: text("url").notNull(),
+  secretEnc: bytea("secret_enc").notNull(),
+  keyId: text("key_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const resendConnections = pgTable("resend_connections", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  domainId: uuid("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+  signingSecretEnc: bytea("signing_secret_enc").notNull(),
+  keyId: text("key_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const deliveryStats = pgTable(
+  "delivery_stats",
+  {
+    accountId: uuid("account_id").notNull().references(() => accounts.id),
+    domainId: uuid("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    delivered: integer("delivered").notNull().default(0),
+    bounced: integer("bounced").notNull().default(0),
+    complained: integer("complained").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.domainId, t.day] })],
 );

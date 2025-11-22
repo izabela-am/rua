@@ -1,4 +1,5 @@
 import { EventSchemas, Inngest } from "inngest";
+import type { AlertRequest } from "../alerts.js";
 import type { SourceChange } from "../intel/sources.js";
 
 type Ids = { domainId: string; accountId: string };
@@ -7,6 +8,7 @@ export type Events = {
   "report/received": { data: Ids & { emailId: string } };
   "report/parsed": { data: Ids & { reportId: string } };
   "sources/classified": { data: Ids & { reportId: string; changes: SourceChange[] } };
+  "alert/raise": { data: AlertRequest };
 };
 
 export const inngest = new Inngest({ id: "rua", schemas: new EventSchemas().fromRecord<Events>() });

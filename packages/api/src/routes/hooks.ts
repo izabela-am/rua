@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Deps } from "../deps.js";
+import { ingestTenantEvent } from "../delivery.js";
 import { domainForRecipients } from "../ingest.js";
 import { log } from "../log.js";
 
@@ -45,6 +46,21 @@ export function hookRoutes(deps: Deps) {
       data: { emailId: event.data.email_id, domainId: domain.id, accountId: domain.accountId },
     });
     return c.json({ ok: true });
+  });
+
+  // Delivery events from a tenant's own Resend account.
+  app.post("/resend/tenant/:id", async (c) => {
+    const id = c.req.param("id");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ error: "not_found" }, 404);
+    const result = await ingestTenantEvent(
+      { workerDb: deps.workerDb, keyring: deps.keyring, verify: deps.verifyTenant },
+      id,
+      await c.req.text(),
+      svixHeaders((n) => c.req.header(n)),
+    );
+    if (result.status === 404) return c.json({ error: "not_found" }, 404);
+    if (result.status === 400) return c.json({ error: "invalid_signature" }, 400);
+    return c.body(null, 204);
   });
 
   return app;

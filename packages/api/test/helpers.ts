@@ -124,6 +124,25 @@ export function fakeMail(byEmail: Record<string, Uint8Array> = {}): InboundMail 
   };
 }
 
+export const testKeyring = { current: "k1", keys: { k1: Buffer.alloc(32, 7), k0: Buffer.alloc(32, 3) } };
+
+export function mailRecorder() {
+  const sent: Array<{ to: string; subject: string; text: string }> = [];
+  return { sent, async send(m: (typeof sent)[number]) { sent.push(m); } };
+}
+
+export function webhookRecorder(status = 200) {
+  const posts: Array<{ url: string; body: string; headers: Record<string, string> }> = [];
+  return {
+    posts,
+    status,
+    async post(url: string, body: string, headers: Record<string, string>) {
+      posts.push({ url, body, headers });
+      return { status: this.status };
+    },
+  };
+}
+
 export function testDeps(dbs: TestDbs, overrides: Partial<Deps> = {}): Deps {
   const resend = new Resend("re_test_unused");
   return {
@@ -138,6 +157,11 @@ export function testDeps(dbs: TestDbs, overrides: Partial<Deps> = {}): Deps {
     asn: testAsn,
     providers: providers(),
     now: () => FIXTURE_NOW,
+    keyring: testKeyring,
+    mailer: mailRecorder(),
+    postWebhook: webhookRecorder().post,
+    verifyTenant: (webhookSecret) => (payload, headers) => resend.webhooks.verify({ payload, headers, webhookSecret }),
+    publicUrl: "https://rua.test",
     ...overrides,
   };
 }
