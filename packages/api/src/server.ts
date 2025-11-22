@@ -16,7 +16,7 @@ import { providers } from "./intel/providers.js";
 import { keyringFromEnv } from "./lib/crypto.js";
 import { systemResolver } from "./lib/dns.js";
 import { logMailer, resendMailer } from "./lib/mailer.js";
-import { pinnedPoster } from "./lib/safe-url.js";
+import { pinnedFetchText, pinnedPoster } from "./lib/safe-url.js";
 import { fsInbound, resendInbound } from "./lib/inbound.js";
 import { fsStore, supabaseStore } from "./lib/storage.js";
 import { log } from "./log.js";
@@ -46,6 +46,7 @@ const deps: Deps = {
   postWebhook: pinnedPoster(systemResolver),
   verifyTenant: (webhookSecret) => (payload, headers) => resend.webhooks.verify({ payload, headers, webhookSecret }),
   publicUrl: e.PUBLIC_URL,
+  fetchText: pinnedFetchText(systemResolver),
 };
 if (local) log.warn("RESEND_API_KEY unset: reading inbound attachments from disk");
 

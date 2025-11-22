@@ -1,4 +1,5 @@
 import type { VerifyJwt } from "./auth.js";
+import type { FetchText } from "./audit/extras.js";
 import type { Db } from "./db/client.js";
 import type { EventSink } from "./inngest/client.js";
 import type { AsnTable } from "./intel/asn.js";
@@ -32,4 +33,6 @@ export type Deps = {
   /** Verifies a tenant Resend event with that tenant's signing secret. */
   verifyTenant: (secret: string) => VerifyWebhook;
   publicUrl: string;
+  /** Fetches small public text files (MTA-STS policies) through the SSRF guard. */
+  fetchText: FetchText;
 };

@@ -9,6 +9,7 @@ export type Events = {
   "report/parsed": { data: Ids & { reportId: string } };
   "sources/classified": { data: Ids & { reportId: string; changes: SourceChange[] } };
   "alert/raise": { data: AlertRequest };
+  "domain/audit": { data: Ids };
 };
 
 export const inngest = new Inngest({ id: "rua", schemas: new EventSchemas().fromRecord<Events>() });

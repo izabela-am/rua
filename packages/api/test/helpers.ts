@@ -162,6 +162,7 @@ export function testDeps(dbs: TestDbs, overrides: Partial<Deps> = {}): Deps {
     postWebhook: webhookRecorder().post,
     verifyTenant: (webhookSecret) => (payload, headers) => resend.webhooks.verify({ payload, headers, webhookSecret }),
     publicUrl: "https://rua.test",
+    fetchText: async () => null,
     ...overrides,
   };
 }

@@ -134,3 +134,23 @@ export const deliveryStats = pgTable(
   },
   (t) => [primaryKey({ columns: [t.domainId, t.day] })],
 );
+
+export type Severity = "high" | "medium" | "low" | "info";
+export type Finding = { code: string; severity: Severity; message: string; fix: string; selector?: string };
+export type Records = {
+  spf: string | null;
+  dmarc: string | null;
+  dkim: Record<string, string | null>;
+  mtaSts: string | null;
+  tlsRpt: string | null;
+  bimi: string | null;
+};
+
+export const recordSnapshots = pgTable("record_snapshots", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  domainId: uuid("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+  takenAt: timestamp("taken_at", { withTimezone: true }).notNull().defaultNow(),
+  records: jsonb("records").$type<Records>().notNull(),
+  findings: jsonb("findings").$type<Finding[]>().notNull(),
+});

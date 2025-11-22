@@ -83,6 +83,56 @@ export async function resolveSafeUrl(resolver: Resolver, raw: string): Promise<{
 }
 
 export type PostResult = { status: number };
+
+const MAX_FETCH_BYTES = 64 * 1024;
+
+/**
+ * GETs a small text file from a checked URL over the pinned address. Returns
+ * null on any failure: non-200, redirect, timeout, oversize or unsafe target.
+ */
+export function pinnedFetchText(resolver: Resolver) {
+  return async (raw: string): Promise<string | null> => {
+    let target: Awaited<ReturnType<typeof resolveSafeUrl>>;
+    try {
+      target = await resolveSafeUrl(resolver, raw);
+    } catch {
+      return null;
+    }
+    const { url, address, family } = target;
+    return new Promise((resolve) => {
+      const req = request(
+        url,
+        {
+          method: "GET",
+          timeout: 5000,
+          lookup: (_host, opts, cb) => {
+            if ((opts as { all?: boolean }).all) cb(null, [{ address, family }] as never);
+            else cb(null, address, family);
+          },
+        },
+        (res) => {
+          if (res.statusCode !== 200) {
+            res.resume();
+            return resolve(null);
+          }
+          const chunks: Buffer[] = [];
+          let size = 0;
+          res.on("data", (c: Buffer) => {
+            size += c.length;
+            if (size > MAX_FETCH_BYTES) {
+              req.destroy();
+              resolve(null);
+            } else chunks.push(c);
+          });
+          res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        },
+      );
+      req.on("timeout", () => req.destroy());
+      req.on("error", () => resolve(null));
+      req.end();
+    });
+  };
+}
 export type PostWebhook = (raw: string, body: string, headers: Record<string, string>) => Promise<PostResult>;
 
 /** POSTs to a checked URL, connecting to the pinned address. No redirects, 5 s timeout. */

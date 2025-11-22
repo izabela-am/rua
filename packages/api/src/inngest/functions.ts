@@ -1,6 +1,10 @@
 import { ReportError } from "@rua/dmarc-parser";
 import { alertsFromChanges, deliverWebhook, emailAlert, storeAlert, type AlertDeps } from "../alerts.js";
+import { eq, isNotNull } from "drizzle-orm";
 import { NonRetriableError } from "inngest";
+import type { AuditDeps } from "../audit/domain.js";
+import { auditDomain, checkOwnership, expireRaw } from "../daily.js";
+import { domains } from "../db/schema.js";
 import { ingestStored, storeAttachment, type IngestDeps } from "../ingest.js";
 import type { EnrichDeps } from "../intel/enrich.js";
 import { classifySource, distinctSourceIps, type SourceChange } from "../intel/sources.js";
@@ -8,7 +12,9 @@ import { AttachmentTooLarge } from "../lib/inbound.js";
 import { log } from "../log.js";
 import { inngest } from "./client.js";
 
-export function createFunctions(deps: IngestDeps & EnrichDeps & AlertDeps) {
+export type FunctionDeps = IngestDeps & EnrichDeps & AlertDeps & AuditDeps & { reportsDomain: string; now: () => Date };
+
+export function createFunctions(deps: FunctionDeps) {
   const parseReport = inngest.createFunction(
     { id: "parse-report", retries: 3, timeouts: { finish: "2m" } },
     { event: "report/received" },
@@ -102,5 +108,54 @@ export function createFunctions(deps: IngestDeps & EnrichDeps & AlertDeps) {
     },
   );
 
-  return [parseReport, classifySources, raiseFromSources, raiseAlert];
+  // Once a day: fan out one audit per verified domain, expire raw objects.
+  // The daily reads and writes also keep a free Supabase project from pausing.
+  const daily = inngest.createFunction({ id: "daily" }, { cron: "TZ=UTC 0 6 * * *" }, async ({ step }) => {
+    const list = await step.run("list-domains", () =>
+      deps.workerDb.select({ domainId: domains.id, accountId: domains.accountId }).from(domains).where(isNotNull(domains.verifiedAt)),
+    );
+    if (list.length) {
+      await step.sendEvent(
+        "fan-out",
+        list.map((data) => ({ name: "domain/audit" as const, data })),
+      );
+    }
+    const expired = await step.run("expire-raw", () => expireRaw(deps, deps.now()));
+    return { domains: list.length, expired };
+  });
+
+  const auditOne = inngest.createFunction(
+    { id: "audit-domain", retries: 2, concurrency: { limit: 5 } },
+    { event: "domain/audit" },
+    async ({ event, step }) => {
+      const load = async () => {
+        const [d] = await deps.workerDb.select().from(domains).where(eq(domains.id, event.data.domainId));
+        return d;
+      };
+      const ownership = await step.run("ownership", async () => {
+        const d = await load();
+        return d ? checkOwnership(deps, d, deps.now()) : null;
+      });
+      if (!ownership) return { skipped: "domain_gone" };
+      if (!ownership.verified) {
+        await step.sendEvent("ownership-lost", {
+          name: "alert/raise",
+          id: `alert-${event.data.domainId}-${ownership.alert.dedupKey}`,
+          data: ownership.alert,
+        });
+        return { verified: false };
+      }
+
+      const result = await step.run("audit", async () => auditDomain(deps, (await load())!, deps.reportsDomain, deps.now()));
+      if (result.alerts.length) {
+        await step.sendEvent(
+          "alerts",
+          result.alerts.map((data) => ({ name: "alert/raise" as const, id: `alert-${data.domainId}-${data.dedupKey}`, data })),
+        );
+      }
+      return { snapshotId: result.snapshotId, findings: result.findings, alerts: result.alerts.length };
+    },
+  );
+
+  return [parseReport, classifySources, raiseFromSources, raiseAlert, daily, auditOne];
 }

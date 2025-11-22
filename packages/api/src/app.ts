@@ -5,6 +5,7 @@ import { log } from "./log.js";
 import { domainRoutes } from "./routes/domains.js";
 import { hookRoutes } from "./routes/hooks.js";
 import { reportRoutes } from "./routes/reports.js";
+import { policyRoutes } from "./routes/policy.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { sourceRoutes } from "./routes/sources.js";
 
@@ -28,6 +29,7 @@ export function createApp(deps: Deps, extra?: (app: Hono) => void) {
   api.route("/", reportRoutes(deps));
   api.route("/", sourceRoutes(deps));
   api.route("/", settingsRoutes(deps));
+  api.route("/", policyRoutes(deps));
   app.route("/api", api);
 
   return app;
