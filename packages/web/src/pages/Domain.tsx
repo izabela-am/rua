@@ -5,6 +5,8 @@ import { api, ApiError, type Domain as DomainT } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Reports } from "./domain/Reports";
 import { Sources } from "./domain/Sources";
+import { Alerts } from "./domain/Alerts";
+import { ResendConnection } from "./domain/ResendConnection";
 
 export function Domain() {
   const { id } = useParams();
@@ -26,6 +28,7 @@ export function Domain() {
           <Routes>
             <Route index element={<Sources domainId={domain.id} />} />
             <Route path="reports" element={<Reports domainId={domain.id} />} />
+            <Route path="alerts" element={<Alerts domainId={domain.id} />} />
             <Route path="setup" element={<Setup domain={domain} onVerified={reload} />} />
           </Routes>
         </>
@@ -38,6 +41,7 @@ function Tabs({ id }: { id: string }) {
   const tabs = [
     { to: "", label: "Sources" },
     { to: "reports", label: "Reports" },
+    { to: "alerts", label: "Alerts" },
     { to: "setup", label: "Setup" },
   ];
   return (
@@ -110,6 +114,7 @@ function Setup({ domain, onVerified }: { domain: DomainT; onVerified: () => void
         </p>
         <Copy value={`v=DMARC1; p=none; rua=mailto:${domain.rua}`} />
       </Card>
+      {domain.verified && <ResendConnection domainId={domain.id} />}
       <div className="text-right">
         <Button variant="danger" onClick={remove}>
           Remove domain

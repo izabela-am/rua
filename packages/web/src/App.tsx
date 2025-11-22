@@ -6,6 +6,7 @@ import { supabase } from "./lib/supabase";
 import { Domain } from "./pages/Domain";
 import { Domains } from "./pages/Domains";
 import { Login } from "./pages/Login";
+import { Settings } from "./pages/Settings";
 
 export function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -26,6 +27,9 @@ export function App() {
           Rua
         </Link>
         <div className="flex items-center gap-3 text-sm text-zinc-600">
+          <Link to="/settings" className="hover:underline">
+            Settings
+          </Link>
           <span>{session.user.email}</span>
           <Button variant="ghost" onClick={() => void supabase.auth.signOut()}>
             Sign out
@@ -35,6 +39,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Domains />} />
         <Route path="/domains/:id/*" element={<Domain />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </div>
   );
