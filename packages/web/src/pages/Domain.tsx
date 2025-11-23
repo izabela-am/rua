@@ -6,6 +6,7 @@ import { useApi } from "../lib/useApi";
 import { Reports } from "./domain/Reports";
 import { Sources } from "./domain/Sources";
 import { Alerts } from "./domain/Alerts";
+import { Overview } from "./domain/Overview";
 import { ResendConnection } from "./domain/ResendConnection";
 
 export function Domain() {
@@ -26,7 +27,8 @@ export function Domain() {
         <>
           <Tabs id={domain.id} />
           <Routes>
-            <Route index element={<Sources domainId={domain.id} />} />
+            <Route index element={<Overview domainId={domain.id} />} />
+            <Route path="sources" element={<Sources domainId={domain.id} />} />
             <Route path="reports" element={<Reports domainId={domain.id} />} />
             <Route path="alerts" element={<Alerts domainId={domain.id} />} />
             <Route path="setup" element={<Setup domain={domain} onVerified={reload} />} />
@@ -39,7 +41,8 @@ export function Domain() {
 
 function Tabs({ id }: { id: string }) {
   const tabs = [
-    { to: "", label: "Sources" },
+    { to: "", label: "Overview" },
+    { to: "sources", label: "Sources" },
     { to: "reports", label: "Reports" },
     { to: "alerts", label: "Alerts" },
     { to: "setup", label: "Setup" },
