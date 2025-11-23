@@ -19,6 +19,13 @@ export type SourceChange = {
   aligned: number;
 };
 
+/** End of a report's period. Classification looks back from here, not from the wall clock, so a late or replayed report is judged on its own window. */
+export async function reportEnd(db: Db, reportId: string): Promise<Date> {
+  const [row] = await db.select({ endAt: reports.endAt }).from(reports).where(eq(reports.id, reportId));
+  if (!row) throw new Error(`report ${reportId} not found`);
+  return row.endAt;
+}
+
 export async function distinctSourceIps(db: Db, reportId: string): Promise<string[]> {
   const rows = await db
     .selectDistinct({ ip: reportRecords.sourceIp })
@@ -42,15 +49,19 @@ export async function alignmentStats(db: Db, domainId: string, ip: string, since
   return row!;
 }
 
-/** Enriches and labels one source IP of a domain and records what changed. */
+/**
+ * Enriches and labels one source IP of a domain and records what changed.
+ * asOf is the end of the report being processed; the 30-day window ends there.
+ */
 export async function classifySource(
   deps: EnrichDeps,
   ev: { domainId: string; accountId: string },
   ip: string,
-  now = new Date(),
+  asOf: Date,
 ): Promise<SourceChange> {
+  const now = new Date();
   const intel = await intelFor(deps, ip, now);
-  const since = new Date(now.getTime() - WINDOW_DAYS * 86_400_000);
+  const since = new Date(asOf.getTime() - WINDOW_DAYS * 86_400_000);
   const s = await alignmentStats(deps.workerDb, ev.domainId, ip, since);
   const stats: AlignmentStats = { messages: s.messages, aligned: s.aligned, failingBoth: s.failingBoth };
   const label = classify(stats, intel.provider, deps.providers);
@@ -61,8 +72,8 @@ export async function classifySource(
       .from(domainSources)
       .where(and(eq(domainSources.domainId, ev.domainId), eq(domainSources.sourceIp, ip)))
       .for("update");
-    const firstSeen = new Date(s.firstSeen ?? now);
-    const lastSeen = new Date(s.lastSeen ?? now);
+    const firstSeen = new Date(s.firstSeen ?? asOf);
+    const lastSeen = new Date(s.lastSeen ?? asOf);
     await tx
       .insert(domainSources)
       .values({ accountId: ev.accountId, domainId: ev.domainId, sourceIp: ip, classification: label, firstSeen, lastSeen })

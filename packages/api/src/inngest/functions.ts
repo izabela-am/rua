@@ -7,7 +7,7 @@ import { auditDomain, checkOwnership, expireRaw } from "../daily.js";
 import { domains } from "../db/schema.js";
 import { ingestStored, storeAttachment, type IngestDeps } from "../ingest.js";
 import type { EnrichDeps } from "../intel/enrich.js";
-import { classifySource, distinctSourceIps, type SourceChange } from "../intel/sources.js";
+import { classifySource, distinctSourceIps, reportEnd, type SourceChange } from "../intel/sources.js";
 import { AttachmentTooLarge } from "../lib/inbound.js";
 import { log } from "../log.js";
 import { inngest } from "./client.js";
@@ -59,7 +59,10 @@ export function createFunctions(deps: FunctionDeps) {
     { event: "report/parsed" },
     async ({ event, step }) => {
       const { reportId, domainId, accountId } = event.data;
-      const ips = await step.run("distinct", () => distinctSourceIps(deps.workerDb, reportId));
+      const { ips, asOf } = await step.run("distinct", async () => ({
+        ips: await distinctSourceIps(deps.workerDb, reportId),
+        asOf: (await reportEnd(deps.workerDb, reportId)).toISOString(),
+      }));
 
       // One step per IP so a slow PTR lookup retries alone; five at a time.
       const changes: SourceChange[] = [];
@@ -67,7 +70,7 @@ export function createFunctions(deps: FunctionDeps) {
         const batch = ips.slice(i, i + 5);
         changes.push(
           ...(await Promise.all(
-            batch.map((ip) => step.run(`classify-${ip}`, () => classifySource(deps, { domainId, accountId }, ip))),
+            batch.map((ip) => step.run(`classify-${ip}`, () => classifySource(deps, { domainId, accountId }, ip, new Date(asOf)))),
           )),
         );
       }

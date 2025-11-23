@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { ipIntel } from "../src/db/schema.js";
 import type { Deps } from "../src/deps.js";
 import { ingestStored, storeAttachment } from "../src/ingest.js";
-import { classifySource, distinctSourceIps } from "../src/intel/sources.js";
+import { classifySource, distinctSourceIps, reportEnd } from "../src/intel/sources.js";
 import { FIXTURE_NOW, fakeMail, fakeResolver, fixture, newAccount, setupDb, testClient, testDeps, verifiedDomainFor } from "./helpers.js";
 
 let db: Awaited<ReturnType<typeof setupDb>>;
@@ -113,4 +113,14 @@ test("another tenant cannot list the sources", async () => {
   const domain = await verifiedDomainFor(client, deps, owner, "mine.test");
   expect((await client.call(newAccount(), "GET", `/api/domains/${domain.id}/sources`)).status).toBe(404);
   expect((await client.call(newAccount(), "GET", `/api/domains/${domain.id}/charts`)).status).toBe(404);
+});
+
+test("a late or replayed report is classified on its own window, not the wall clock", async () => {
+  const me = newAccount();
+  const domain = await verifiedDomainFor(client, deps, me, "late.test");
+  const reportId = await ingest(me, domain.id, "google.xml.gz", "em_late");
+  // The fixture is from 2025-11-10; whatever today is, the window ends at the report.
+  const asOf = await reportEnd(db.workerDb, reportId);
+  const change = await classifySource(deps, { domainId: domain.id, accountId: me }, "209.85.220.41", asOf);
+  expect(change).toMatchObject({ classification: "aligned_sender", messages: 400 });
 });
