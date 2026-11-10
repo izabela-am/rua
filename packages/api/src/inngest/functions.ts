@@ -1,7 +1,7 @@
 import { ReportError } from "@rua/dmarc-parser";
 import { alertsFromChanges, deliverWebhook, emailAlert, storeAlert, type AlertDeps } from "../alerts.js";
 import { eq, isNotNull } from "drizzle-orm";
-import { NonRetriableError } from "inngest";
+import { cron, NonRetriableError } from "inngest";
 import type { AuditDeps } from "../audit/domain.js";
 import { auditDomain, checkOwnership, expireRaw } from "../daily.js";
 import { domains } from "../db/schema.js";
@@ -10,14 +10,13 @@ import type { EnrichDeps } from "../intel/enrich.js";
 import { classifySource, distinctSourceIps, reportEnd, type SourceChange } from "../intel/sources.js";
 import { AttachmentTooLarge } from "../lib/inbound.js";
 import { log } from "../log.js";
-import { inngest } from "./client.js";
+import { events, inngest, type Payload } from "./client.js";
 
 export type FunctionDeps = IngestDeps & EnrichDeps & AlertDeps & AuditDeps & { reportsDomain: string; now: () => Date };
 
 export function createFunctions(deps: FunctionDeps) {
   const parseReport = inngest.createFunction(
-    { id: "parse-report", retries: 3, timeouts: { finish: "2m" } },
-    { event: "report/received" },
+    { id: "parse-report", retries: 3, timeouts: { finish: "2m" }, triggers: [events.reportReceived] },
     async ({ event, step }) => {
       const { domainId, accountId, emailId } = event.data;
 
@@ -55,8 +54,7 @@ export function createFunctions(deps: FunctionDeps) {
   );
 
   const classifySources = inngest.createFunction(
-    { id: "classify-sources", retries: 3 },
-    { event: "report/parsed" },
+    { id: "classify-sources", retries: 3, triggers: [events.reportParsed] },
     async ({ event, step }) => {
       const { reportId, domainId, accountId } = event.data;
       const { ips, asOf } = await step.run("distinct", async () => ({
@@ -84,15 +82,14 @@ export function createFunctions(deps: FunctionDeps) {
   );
 
   const raiseFromSources = inngest.createFunction(
-    { id: "alerts-from-sources" },
-    { event: "sources/classified" },
+    { id: "alerts-from-sources", triggers: [events.sourcesClassified] },
     async ({ event, step }) => {
       const requests = alertsFromChanges(event.data, event.data.changes);
       if (requests.length === 0) return { alerts: 0 };
       await step.sendEvent(
         "raise",
         // The event id makes a re-run of classification raise nothing new.
-        requests.map((data) => ({ name: "alert/raise" as const, id: `alert-${data.domainId}-${data.dedupKey}`, data })),
+        requests.map((data): Payload => ({ name: "alert/raise", id: `alert-${data.domainId}-${data.dedupKey}`, data })),
       );
       return { alerts: requests.length };
     },
@@ -100,8 +97,7 @@ export function createFunctions(deps: FunctionDeps) {
 
   // One run per alert. Store first, then each channel in its own retried step.
   const raiseAlert = inngest.createFunction(
-    { id: "raise-alert", retries: 5 },
-    { event: "alert/raise" },
+    { id: "raise-alert", retries: 5, triggers: [events.alertRaise] },
     async ({ event, step }) => {
       const alertId = await step.run("store", () => storeAlert(deps.workerDb, event.data));
       if (!alertId) return { duplicate: true };
@@ -113,14 +109,14 @@ export function createFunctions(deps: FunctionDeps) {
 
   // Once a day: fan out one audit per verified domain, expire raw objects.
   // The daily reads and writes also keep a free Supabase project from pausing.
-  const daily = inngest.createFunction({ id: "daily" }, { cron: "TZ=UTC 0 6 * * *" }, async ({ step }) => {
+  const daily = inngest.createFunction({ id: "daily", triggers: [cron("TZ=UTC 0 6 * * *")] }, async ({ step }) => {
     const list = await step.run("list-domains", () =>
       deps.workerDb.select({ domainId: domains.id, accountId: domains.accountId }).from(domains).where(isNotNull(domains.verifiedAt)),
     );
     if (list.length) {
       await step.sendEvent(
         "fan-out",
-        list.map((data) => ({ name: "domain/audit" as const, data })),
+        list.map((data): Payload => ({ name: "domain/audit", data })),
       );
     }
     const expired = await step.run("expire-raw", () => expireRaw(deps, deps.now()));
@@ -128,8 +124,7 @@ export function createFunctions(deps: FunctionDeps) {
   });
 
   const auditOne = inngest.createFunction(
-    { id: "audit-domain", retries: 2, concurrency: { limit: 5 } },
-    { event: "domain/audit" },
+    { id: "audit-domain", retries: 2, concurrency: { limit: 5 }, triggers: [events.domainAudit] },
     async ({ event, step }) => {
       const load = async () => {
         const [d] = await deps.workerDb.select().from(domains).where(eq(domains.id, event.data.domainId));
@@ -153,7 +148,7 @@ export function createFunctions(deps: FunctionDeps) {
       if (result.alerts.length) {
         await step.sendEvent(
           "alerts",
-          result.alerts.map((data) => ({ name: "alert/raise" as const, id: `alert-${data.domainId}-${data.dedupKey}`, data })),
+          result.alerts.map((data): Payload => ({ name: "alert/raise", id: `alert-${data.domainId}-${data.dedupKey}`, data })),
         );
       }
       return { snapshotId: result.snapshotId, findings: result.findings, alerts: result.alerts.length };
