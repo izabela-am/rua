@@ -1,6 +1,6 @@
 # Rua
 
-DMARC aggregate report pipeline and sender reputation dashboard. Rua gives each domain a unique report address, parses the reports receivers send there, labels every sending IP, alerts on new and spoofing sources, audits the domain's mail DNS records daily, and says when it is safe to move to `p=quarantine` or `p=reject`. Tenants who send through Resend can connect their Resend webhooks to see bounce and complaint rates next to the DMARC data.
+DMARC aggregate report pipeline and sender reputation dashboard. Rua gives each domain a unique report address, parses the reports receivers send there, labels every sending IP, alerts on new and spoofing sources, audits the domain's mail DNS records daily, and says when it is safe to move to `p=quarantine` or `p=reject`. Tenants who send through Resend can connect their Resend webhooks to see bounce and complaint rates next to the DMARC data. Other vendors support for this feature will be added soon
 
 The design is in `specs/rua.md` (view it with `pnpm spec`).
 
